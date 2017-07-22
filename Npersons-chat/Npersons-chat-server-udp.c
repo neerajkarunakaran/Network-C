@@ -4,9 +4,14 @@
 #include <string.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
+#include <ctype.h>
 #define MAXUSERS 50
+typedef struct u{
+    char name[20];
+    int port;
+}user;
+user users[MAXUSERS];
 int check_user(struct sockaddr_in *user);
-int users[MAXUSERS];
 int cnt = 0;
 int main()
 {
@@ -25,44 +30,64 @@ int main()
     setsockopt(udpSocket, SOL_SOCKET, SO_BROADCAST, &yes, sizeof (int));
     bind(udpSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
     addr_size = sizeof serverStorage;
+    fd_set readfds, master;
+    FD_ZERO(&readfds);
+    FD_ZERO(&master);
+    FD_SET(udpSocket, &master);
+    int uid;
+    char buf[1024];
+ 
     while (1) {
-	nBytes =
-	    recvfrom(udpSocket, buffer, 1024, 0, (struct sockaddr*)&serverStorage, &addr_size);
-        printf("%s\n", buffer);
-        struct sockaddr_in *p = (struct sockaddr_in*)&serverStorage;
-        if(check_user(p)){
-            int i;
-            int sender = p->sin_port;
-            for(i = 0; i < cnt; i++){
+        readfds = master;
+        if(select(udpSocket + 1, &readfds, NULL, NULL, NULL)){
+	        nBytes =
+	            recvfrom(udpSocket, buffer, 1024, 0, (struct sockaddr*)&serverStorage, &addr_size);
+            buffer[nBytes] = '\0';
+            struct sockaddr_in *p = (struct sockaddr_in*)&serverStorage;
+                if((uid = check_user(p)) > 0){
+                    sprintf(buf, "%s->%s\n", users[uid].name, buffer);         
+                 
+                    int sender = ntohs(p->sin_port);
+                    for(i = 0; i < cnt; i++){
                 
-                if(users[i] != sender){
-                    p->sin_port = htons(users[i]); 
-                    sendto(udpSocket, buffer, nBytes, 0, (struct sockaddr*)&serverStorage, addr_size);
-                }
-            }
-        } else{
-  
-            users[cnt++] = p->sin_port;
-            int sender = p->sin_port;
-            int i ;
-            for(i = 0; i < cnt; i++) {
-                if(users[i] != sender){
-                    p->sin_port = users[i];
-                    sendto(udpSocket, buffer, nBytes, 0, (struct sockaddr*)&serverStorage, addr_size);
-                }
-            }
-        }
-    }
-                     
+                        if(users[i].port != sender){
+                            p->sin_port = htons(users[i].port); 
+                            sendto(udpSocket, buf, nBytes, 0, (struct sockaddr*)&serverStorage, addr_size);
+                        }
+                    }
+                   
+        
+                } else{
+                    sendto(udpSocket, "Your signed in Continue\n", 24, 0, (struct sockaddr*)&serverStorage, addr_size);
+                    strcpy(users[cnt].name, buffer);
             
+                    sprintf(buffer, "%s JOINED!!!!!!\n", users[cnt].name);
+                    users[cnt++].port = ntohs(p->sin_port);
+                    int sender = ntohs(p->sin_port);
+                    
+                    int i ;
+                    for(i = 0; i < cnt; i++) {
+                        if(users[i].port != sender){
+                            p->sin_port = htons(users[i].port);
+                            sendto(udpSocket, buffer, strlen(buffer), 0, (struct sockaddr*)&serverStorage, addr_size);
+                        }
+                    
+                    }
+       
+                }
+            FD_CLR(udpSocket, &readfds);
+        }
+                     
+    }        
 		     
     return 0;
 }
 int check_user(struct sockaddr_in *user){
     int i;
+    int sender = ntohs(user->sin_port);
     for(i = 0; i < cnt; i++){
-        if(users[i] == user->sin_port){
-            return 1;
+        if(users[i].port == sender){
+            return i;
         }
     }
    
