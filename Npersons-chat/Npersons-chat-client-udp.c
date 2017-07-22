@@ -6,57 +6,54 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <wait.h>
-#include <fcntl.h>
-#include <pthread.h>
-void* readfunction(void* clientSocket);
-void* recvfunction(void* clientSocket);
 int main(void)
 {
     int clientSocket;
     clientSocket = socket(AF_INET, SOCK_DGRAM, 0);
-    pthread_t t1, t2;
-                
-                
-           
-                
-               
-    pthread_create(&t1, 0, readfunction, &clientSocket);
-    pthread_create(&t2, 0, recvfunction, &clientSocket);
-    int status;
-    pthread_join(t1,(void*) &status);
-    pthread_join(t2,(void*) &status);
-    return 0;
-}
-void* readfunction(void* clientSocket)
-{
-    int clientsocket = *((int*)clientSocket);
     struct sockaddr_in serverAddr;
-    char buffer[1024];
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(8888);
     serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
     memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
     socklen_t addr_size = sizeof serverAddr;
+    fd_set readfds, master;
+    FD_ZERO(&readfds);
+    FD_ZERO(&master);
+    FD_SET(0, &master);
+    FD_SET(clientSocket, &master);
+    char buffer[1024];
     int nBytes;
+    printf("Enter Your Name and wait for reply from  groop\n");
+    nBytes = read(0, buffer, 1024);
+    buffer[nBytes] = '\0';
+    sendto(clientSocket, buffer, strlen(buffer), 0, (struct sockaddr*)&serverAddr, addr_size);
+    fflush(0);   
     while(1){
-        fgets(buffer, 1024, stdin);
-        nBytes = strlen(buffer);
-        sendto(clientsocket, buffer, nBytes, 0, (struct sockaddr*)&serverAddr, addr_size);
+        readfds = master;
+        select(clientSocket + 1, &readfds, NULL, NULL, NULL);
+        if(FD_ISSET(0, &readfds)){
+            nBytes = read(0, buffer, 1024);
+            buffer[nBytes] = '\0';
+            sendto(clientSocket, buffer, strlen(buffer), 0, (struct sockaddr*)&serverAddr, addr_size);
+            
+            FD_CLR(0, &readfds);
+        }
+        if(FD_ISSET(clientSocket, &readfds)){
+            nBytes = recvfrom(clientSocket, buffer, 1024, 0, (struct sockaddr*)&serverAddr, &addr_size);
+            buffer[nBytes] = '\0';
+            printf("%s\n", buffer);
+        
+            FD_CLR(clientSocket, &readfds);
+        }
     }
+                  
+                
+           
+                
+               
+    return 0;
 }
         
  
-void* recvfunction(void* clientSocket)
-{
-    int nBytes;
-    int clientsocket = *((int*)clientSocket);
-    struct sockaddr_storage serverAddr;
-    socklen_t addr_size;
-    char buffer[1024];
-    while(nBytes = recvfrom(clientsocket, buffer, 1024, 0, (struct sockaddr*)&serverAddr, &addr_size)){
-        struct sockaddr_in *p = (struct sockaddr_in*)&serverAddr;
-        printf("port %d: %s\n", ntohs(p->sin_port), buffer);
-    }
-}    
+    
            
